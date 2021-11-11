@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
 
     string m_list[] = {"256","1024","4096"};
     string r_list[] = {"2","11","20","40"};
-
+    double start_time = clock();
     for(string M : m_list){
         for(string R : r_list){
 
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
             std::cout << "file size: " << file_data.size() << std::endl;
 
-            double start_time = clock();
+            //double start_time = clock();
             for (size_t i=0; i<file_data.size(); i+=kPageSize) {
                 std::vector<unsigned char> result;
 
@@ -65,14 +65,15 @@ int main(int argc, char* argv[]) {
 //        lz_code_to_file(out, bit_map, result);
 //        bit_map.Clear();
             }
-            double end_time = clock();
-            printf("compress time: %.3f s\n",(end_time-start_time)/1000000);
+            //double end_time = clock();
+            //printf("compress time: %.3f s\n",(end_time-start_time)/1000000);
 
             in.close();
             out.close();
         }
     }
-
+    double end_time = clock();
+    printf("time total: %.3f s\n",(end_time-start_time)/1000000);
 
     return 0;
 }

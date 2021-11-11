@@ -7,24 +7,38 @@
 #include <sstream>
 #include <fstream>
 
-const size_t MAX_LENGTH = 200;
-const size_t RECORD_SIZE = 256;
-const size_t MAX_DISTANCE = 128*128*256;
+const size_t MAX_LENGTH = 64;
+const size_t RECORD_SIZE = 128;
+const size_t MAX_DISTANCE = 256*256*32;
+const size_t DISTANCE_DIVISION = 32;
+
 inline bool accept_match_case(int distance,int length){
-    if(length>3){
+
+    //不是16的整数倍就false
+    //该条件挪入算法中提前运行，以此加速
+
+    if(length>2){
         return true;
     }else
     if(length==2){
-        if(distance>>7 == 0){
-            return true;
-        }
-    }else
-    if(length==3){
-        if(distance >>14 == 0){
+        if(distance>>8 == 0){
             return true;
         }
     }
     return false;
+}
+void push_d_l(int distance,int length,vector<unsigned char> &c){
+    distance = distance/DISTANCE_DIVISION;
+    if(distance < 256){
+        c.push_back((unsigned char)length);
+        c.push_back((char)distance);
+    }else{
+        c.push_back((unsigned char)length+128);
+        int fir = (distance&255);
+        int sec = distance>>8;
+        c.push_back(fir);
+        c.push_back(sec);
+    }
 }
 
 struct pos_list{
@@ -51,35 +65,14 @@ struct pos_list{
         current = 0;
     }
 };
-void push_d_l(int distance,int length,vector<unsigned char> &c){
-    c.push_back((unsigned char)length);
-    if(distance< 1<<7){
-        c.push_back((char)distance);
-    }else if(distance< 1<<14){
-        int fir = (distance&127)+128;
-        int sec = distance>>7;
-        c.push_back(fir);
-        c.push_back(sec);
-    }else{
-        int fir = (distance&127)+128;
-        int sec = ((distance>>7)&127)+128;
-        int thi = distance>>14;
-        c.push_back(fir);
-        c.push_back(sec);
-        c.push_back(thi);
-    }
-
-}
 
 pos_list codes[256 * 256];
-void lz_div(const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out){
+void lz_div(int offset,const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out){
     int header_index = 0;
 
     vector<unsigned char> ori_data;
     while(header_index < read_size){
-        if(header_index%100000==0){
-            cout<<header_index<<endl;
-        }
+
         pos_list poslist = codes[(data[header_index]<<8) + data[header_index+1]];
 
         int match_length = 0;
@@ -88,7 +81,10 @@ void lz_div(const unsigned char* data, unsigned int position,const int read_size
 
         for(int a = 0;a<poslist.get_size();a++){
             int temp_distance = position+header_index-poslist.get(a);
-            if(temp_distance>MAX_DISTANCE || temp_distance==0){
+            if(temp_distance>MAX_DISTANCE || temp_distance<=0){
+                continue;
+            }
+            if((distance%DISTANCE_DIVISION)!=0){
                 continue;
             }
             int temp_length = 0;
@@ -116,7 +112,7 @@ void lz_div(const unsigned char* data, unsigned int position,const int read_size
             codes[(data[header_index]*256+data[header_index+1])].put(position+header_index);
             header_index++;
 
-            if(ori_data.size()>=255-MAX_LENGTH){
+            if(ori_data.size()>=127-MAX_LENGTH){
                 int size = ori_data.size();
                 out.push_back(size+MAX_LENGTH);
                 for(int a = 0;a<size;a++){
@@ -184,12 +180,16 @@ void lz_reset(){
 
 }
 
-void lz_decompress(vector<unsigned char> data,vector<unsigned char> &out){
+void lz_decompress(const vector<unsigned char> &data,vector<unsigned char> &out){
     size_t header_index = 0;
 
     while(header_index<data.size()){
         unsigned char length = data[header_index];
-        cout<<"read length "<<(int)length<<endl;
+        bool two_bit_distance = false;
+        if(length>128){
+            length-=128;
+            two_bit_distance = true;
+        }
         if(length>MAX_LENGTH){
             header_index++;
             for(int a = 0;a<length-MAX_LENGTH;a++){
@@ -200,11 +200,11 @@ void lz_decompress(vector<unsigned char> data,vector<unsigned char> &out){
         }else{
             header_index++;
             int distance = data[header_index];
-            if(distance>=128){
-                distance = distance%128;
+            if(two_bit_distance){
                 header_index++;
-                distance += data[header_index]*128;
+                distance += data[header_index]*256;
             }
+            distance=distance*DISTANCE_DIVISION;
             //读取distance数据
             int model_index = out.size()-distance;
             //cout<<"model start "<<(int)(out[model_index])<<endl;
@@ -223,7 +223,7 @@ int mainn(){
     unsigned char p[32] = {5,6,7,7,7,5,6,1,5,6,8,1,5,6,8,1,5};
     vector<unsigned char> out;
     vector<unsigned char> decom;
-    lz_div(p,0,16,out);
+    lz_div(0,p,0,16,out);
     for(unsigned char c : out){
         cout<<(int)c<<" ";
     }
