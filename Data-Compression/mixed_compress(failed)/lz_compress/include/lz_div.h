@@ -10,7 +10,7 @@ using namespace std;
 
 
 
-void lz_div(int offset,const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out);
+void lz_div(const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out);
 
 void lz_read(const unsigned char* data, unsigned int position,const int read_size);
 

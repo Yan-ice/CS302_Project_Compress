@@ -3,7 +3,7 @@ project(Data_Compression)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(compress_engine_1 mix_compress_engine_1.cpp d_compress/src/frame_io.cpp d_compress/src/coding_1.cpp d_compress/include/coding_1.h
+add_executable(compress_engine_1 mix_compress_engine_1.cpp ../d_compress/src/frame_io.cpp ../d_compress/src/coding_1.cpp ../d_compress/include/coding_1.h
         lz_compress/include/lz_div.h lz_compress/src/lz_div.cpp
         )
 

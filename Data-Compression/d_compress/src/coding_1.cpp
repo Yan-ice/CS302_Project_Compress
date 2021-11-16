@@ -1,78 +1,9 @@
 #include "../include/coding_1.h"
 #include "../include/frame_io.h"
 #include "../include/utils.h"
-#include "../../second_compress/include/lz_div.h"
+#include "../../mixed_compress/lz_compress/include/lz_div.h"
 #include <iostream>
 using namespace std;
-
-void delta_coding(const int kSampleSize, long long& last_change_ts, long long current_ts,
-                  unsigned char* read_buff, unsigned char* looked_buff, std::vector<unsigned char>& result) {
-    for (int sample_start=0; sample_start<kBytePerFrame; sample_start+=kSampleSize) {
-
-        std::vector<unsigned char> sample_coding_list;
-        for (int row_start=0, row_idx=0; row_start<kSampleSize; row_start+=kBytePerLine, ++row_idx) {
-            sample_coding_list.push_back(kRowFront+row_idx);
-            std::vector<unsigned char> group_coding_list;
-            for (int group_idx=0; group_idx<kGroupNumber; ++group_idx) {
-                unsigned char group_flag = kGroupFront+(group_idx<<4);
-                std::vector<unsigned char> changed_list;
-                for (int idx=0; idx<kGroupSize; ++idx) {
-                    int sample_idx = row_start+group_idx*kGroupSize+idx;
-                    if (read_buff[sample_start+sample_idx] != looked_buff[sample_idx]) {
-                        group_flag += (1<<idx);
-                        changed_list.push_back(read_buff[sample_start+sample_idx]);
-                        looked_buff[sample_idx] = read_buff[sample_start+sample_idx];
-                    }
-                }
-                if (!changed_list.empty()) {
-                    group_coding_list.push_back(group_flag);
-                    for (auto val : changed_list) {
-                        group_coding_list.push_back(val);
-                    }
-                }
-                changed_list.clear();
-            }
-           if (group_coding_list.empty()) {
-               sample_coding_list.pop_back();
-           } else {
-               for (auto row_code : group_coding_list) {
-                   sample_coding_list.push_back(row_code);
-               }
-           }
-        }
-        if (!sample_coding_list.empty()) {
-            long long delta_ts = current_ts - last_change_ts - 1;
-            if (delta_ts<16) {
-                result.push_back((unsigned char)delta_ts);
-            } else {
-                unsigned char ts_flag = 16;
-                std::vector<unsigned char> delta_ts_code;
-                if (delta_ts<=UCHAR_MAX) {
-                    delta_ts_code = integer_to_array((unsigned char) delta_ts);
-                    ts_flag += 1;
-                } else if (delta_ts>UCHAR_MAX && delta_ts<=USHRT_MAX) {
-                    delta_ts_code = integer_to_array((unsigned short) delta_ts);
-                    ts_flag += 2;
-                } else if (delta_ts>USHRT_MAX && delta_ts<=UINT_MAX) {
-                    delta_ts_code = integer_to_array((unsigned int) delta_ts);
-                    ts_flag += 4;
-                } else if (delta_ts>UINT_MAX && delta_ts<=ULLONG_MAX) {
-                    delta_ts_code = integer_to_array((unsigned long long) delta_ts);
-                    ts_flag += 8;
-                }
-                result.push_back(ts_flag);
-                for (const auto& ts_code : delta_ts_code) {
-                    result.push_back(ts_code);
-                }
-            }
-            for (const auto& code : sample_coding_list) {
-                result.push_back(code);
-            }
-            last_change_ts = current_ts;
-        }
-        ++current_ts;
-    }
-}
 
 void delta_compress(const unsigned char* data, const size_t kDataSize, std::vector<unsigned char> &result) {
     long long timestamp;
@@ -89,9 +20,7 @@ void delta_compress(const unsigned char* data, const size_t kDataSize, std::vect
     long long last_change_ts = timestamp-1;
     long long current_ts = timestamp;
     for (size_t i=0; i<kDataSize; i+=kFrameSize) { //处理一个数据帧
-        if(i%1000==0){
-            cout<<i<<"/"<<kDataSize<<endl;
-        }
+
         result.push_back(0);
         vector<unsigned char>::iterator timestamp_flag = result.end()-1;
         //TODO: 这里应该需要通过数据帧的头信息读取帧大小到timestamp_flag里。
@@ -128,8 +57,11 @@ void delta_compress(const unsigned char* data, const size_t kDataSize, std::vect
                 changed_list.clear();
             }
 
-            if(sample_coding_list.size()>132){
+
+            if(sample_coding_list.size()>0){
+                //以下是LZ77处理方式。
                 lz_div(data+pos, pos,256, lz77_coding_list);
+                //cout<<lz77_coding_list.size()<<"\t"<<sample_coding_list.size()<<endl;
                 if(lz77_coding_list.size()<sample_coding_list.size()){
                     *timestamp_flag += 1<<para;
                     for (const auto& ts_code : lz77_coding_list) {
@@ -140,27 +72,14 @@ void delta_compress(const unsigned char* data, const size_t kDataSize, std::vect
                         result.push_back(ts_code);
                     }
                 }
-            }else{
-                lz_read(data+pos, pos,256);
-                for (const auto& ts_code : sample_coding_list) {
+            }else {
+                //以下是不采用LZ77处理方式。
+                lz_read(data + pos, pos, 256);
+                for (const auto &ts_code : sample_coding_list) {
                     result.push_back(ts_code);
                 }
             }
 
-            //以下是LZ77处理方式。
-
-
-            //为标记设置本段用了哪种编码方式，并把对应编码放入。
-            if(lz77_coding_list.size()<sample_coding_list.size()){
-                *timestamp_flag += 1<<para;
-                for (const auto& ts_code : lz77_coding_list) {
-                    result.push_back(ts_code);
-                }
-            }else{
-                for (const auto& ts_code : sample_coding_list) {
-                    result.push_back(ts_code);
-                }
-            }
         } // 完成1个dataframe
     }
     auto tail_ts_code = integer_to_array(current_ts-last_change_ts); // 尾编码,为了防止最后多个采样数据一致造成数据丢失,补一个delta_ts

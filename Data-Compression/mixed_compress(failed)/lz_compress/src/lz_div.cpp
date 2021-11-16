@@ -9,7 +9,11 @@
 
 const size_t MAX_LENGTH = 64;
 const size_t RECORD_SIZE = 128;
+
+//11.5MB/32B=384个采样
+//384可以用9bit表示
 const size_t MAX_DISTANCE = 256*256*32;
+
 const size_t DISTANCE_DIVISION = 32;
 
 inline bool accept_match_case(int distance,int length){
@@ -27,17 +31,25 @@ inline bool accept_match_case(int distance,int length){
     }
     return false;
 }
+
+int small_than_256 = 0;
+int from_256_to_512 = 0;
+int bigger_than_512 = 0;
 void push_d_l(int distance,int length,vector<unsigned char> &c){
     distance = distance/DISTANCE_DIVISION;
     if(distance < 256){
+        small_than_256++;
         c.push_back((unsigned char)length);
         c.push_back((char)distance);
     }else{
+        if(distance<512){
+            from_256_to_512++;
+        }else{
+            bigger_than_512++;
+        }
         c.push_back((unsigned char)length+128);
-        int fir = (distance&255);
-        int sec = distance>>8;
-        c.push_back(fir);
-        c.push_back(sec);
+        distance-=256;
+        c.push_back((char)distance);
     }
 }
 
@@ -67,7 +79,7 @@ struct pos_list{
 };
 
 pos_list codes[256 * 256];
-void lz_div(int offset,const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out){
+void lz_div(const unsigned char* data, unsigned int position,const int read_size, vector<unsigned char> &out){
     int header_index = 0;
 
     vector<unsigned char> ori_data;
@@ -91,15 +103,23 @@ void lz_div(int offset,const unsigned char* data, unsigned int position,const in
 
             const unsigned char* model = data+header_index;
             const unsigned char* compare = data+header_index-temp_distance;
-            while(*model==*compare){
+            while(compare!=nullptr && *model==*compare){
                 //cout<<"check "<<model<<" "<<compare<<endl;
                 model++;
                 compare++;
                 temp_length++;
             }
             if(accept_match_case(temp_distance,temp_length)){
+                int check_temp_length = temp_length;
+                int check_length = temp_length;
+                if(distance>256){
+                    check_length--;
+                }
+                if(temp_distance>256){
+                    check_temp_length--;
+                }
                 if(temp_length>match_length ||
-                   (temp_length==match_length && temp_distance<distance)){
+                    (temp_length==match_length && temp_distance<distance)){
                     match_length = temp_length;
                     distance = temp_distance;
                 }
@@ -165,6 +185,7 @@ void lz_div(int offset,const unsigned char* data, unsigned int position,const in
         }
         ori_data.clear();
     }
+    cout<<small_than_256<<"\t"<<from_256_to_512<<"\t"<<bigger_than_512<<endl;
 }
 void lz_read(const unsigned char* data, unsigned int position,const int read_size){
     for(int a = 0;a<read_size-1;a++){
@@ -177,7 +198,9 @@ void lz_reset(){
     for(int a = 0;a<256*256;a++){
         codes[a].clear();
     }
-
+    from_256_to_512 = 0;
+    small_than_256 = 0;
+    bigger_than_512 = 0;
 }
 
 void lz_decompress(const vector<unsigned char> &data,vector<unsigned char> &out){
@@ -223,7 +246,7 @@ int mainn(){
     unsigned char p[32] = {5,6,7,7,7,5,6,1,5,6,8,1,5,6,8,1,5};
     vector<unsigned char> out;
     vector<unsigned char> decom;
-    lz_div(0,p,0,16,out);
+    lz_div(p,0,16,out);
     for(unsigned char c : out){
         cout<<(int)c<<" ";
     }

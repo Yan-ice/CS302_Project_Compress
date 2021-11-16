@@ -38,7 +38,7 @@ void write_result(std::ofstream& out, const std::vector<unsigned char>& result) 
 
 int main(int argc, char* argv[]) {
 
-    string m_list[] = {"256","1024","4096"};
+    string m_list[] = {"256","512","1024","4096"};
     string r_list[] = {"2","3","11","20","40"};
     double start_time = clock();
     for(string M : m_list){
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
             vector<unsigned char> result;
             result.reserve(kDataSize*2);
-            lz_div(stoi(M),&file_data[0], 0, kDataSize, result);
+            lz_div(&file_data[0], 0, kDataSize, result);
 
             write_result(out, result);
             lz_reset();
